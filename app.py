@@ -639,7 +639,7 @@ def load_data(movies_path, ratings_path):
 
 
 movies_file = find_file("movies.csv")
-ratings_file = find_file("ratings.csv")
+ratings_file = find_file("ratings_sample.csv")
 
 if movies_file is None or ratings_file is None:
     st.markdown(
@@ -654,7 +654,7 @@ if movies_file is None or ratings_file is None:
     )
     st.error(
         "Dataset files were not found. Required files: "
-        "`dataset/movies.csv` and `dataset/ratings.csv`."
+        "`dataset/movies.csv` and `dataset/ratings_sample.csv`."
     )
     st.code(
         "Movie-Ratings-Analysis/\n"
