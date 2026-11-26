@@ -3,7 +3,7 @@
 # Complete Streamlit application
 # ============================================================
 # Run:
-#   pip install streamlit pandas plotly
+#   pip install streamlit pandas matplotlib
 #   streamlit run app.py
 #
 # Expected data:
@@ -22,8 +22,7 @@ import re
 import html
 
 import pandas as pd
-import plotly.express as px
-import plotly.graph_objects as go
+import matplotlib.pyplot as plt
 import streamlit as st
 
 
@@ -392,7 +391,7 @@ st.markdown(
         background: #176B50 !important;
     }
 
-    div[data-testid="stPlotlyChart"],
+    div[data-testid="stImage"],
     div[data-testid="stDataFrame"] {
         background: white;
         border: 1px solid #C3D8CD;
@@ -496,7 +495,7 @@ st.markdown(
         .stTabs [data-baseweb="tab-list"] { overflow-x: auto; flex-wrap: nowrap; }
         .stTabs [data-baseweb="tab"] { white-space: nowrap; padding: 9px 11px; }
 
-        div[data-testid="stPlotlyChart"], div[data-testid="stDataFrame"] { overflow-x: auto; }
+        div[data-testid="stImage"], div[data-testid="stDataFrame"] { overflow-x: auto; }
         div[data-testid="stButton"] button, div[data-testid="stDownloadButton"] button { min-height: 44px; }
         input, textarea { font-size: 16px !important; }
         .quick-card { min-height: 0; }
@@ -509,48 +508,29 @@ st.markdown(
 
 
 # ------------------------------------------------------------
-# 3. PLOTLY STYLE
+# 3. MATPLOTLIB STYLE
 # ------------------------------------------------------------
 
-def style_chart(fig, height=360, show_legend=True):
-    fig.update_layout(
-        template="plotly_white",
-        paper_bgcolor="rgba(0,0,0,0)",
-        plot_bgcolor="#FFFFFF",
-        font=dict(family="DM Sans, sans-serif", color="#2E4A3F", size=11),
-        title=dict(font=dict(family="Manrope, sans-serif", size=14, color="#10231C")),
-        height=height,
-        margin=dict(l=18, r=18, t=55, b=25),
-        legend=dict(
-            orientation="h",
-            yanchor="bottom",
-            y=1.02,
-            xanchor="right",
-            x=1,
-            font=dict(size=10),
-        ),
-        showlegend=show_legend,
-        hoverlabel=dict(
-            bgcolor="#10231C",
-            font_color="#FFFFFF",
-            bordercolor="#10231C",
-        ),
-    )
-    fig.update_xaxes(
-        automargin=True,
-        showgrid=True,
-        gridcolor="#E4EEE8",
-        zeroline=False,
-        linecolor="#C9DBD1",
-    )
-    fig.update_yaxes(
-        automargin=True,
-        showgrid=True,
-        gridcolor="#E4EEE8",
-        zeroline=False,
-        linecolor="#C9DBD1",
-    )
-    return fig
+def style_axes(ax, title=None):
+    """Apply the CineScope visual style to a Matplotlib axes."""
+    ax.set_facecolor("#FFFFFF")
+    ax.grid(axis="both", color="#E4EEE8", linewidth=0.8)
+    ax.set_axisbelow(True)
+    ax.spines["top"].set_visible(False)
+    ax.spines["right"].set_visible(False)
+    ax.spines["left"].set_color("#C9DBD1")
+    ax.spines["bottom"].set_color("#C9DBD1")
+    ax.tick_params(colors="#2E4A3F", labelsize=9)
+    if title:
+        ax.set_title(title, loc="left", fontsize=12, fontweight="bold",
+                     color="#10231C", pad=12)
+
+def show_chart(fig):
+    """Display and release a Matplotlib figure in Streamlit."""
+    fig.patch.set_facecolor("#FFFFFF")
+    fig.tight_layout()
+    st.pyplot(fig, use_container_width=True)
+    plt.close(fig)
 
 
 # ------------------------------------------------------------
@@ -943,38 +923,26 @@ if page == "Overview":
         section("Most popular titles", "Top titles based on weighted popularity.")
         top = filtered.head(10).sort_values("weighted_rating", ascending=True)
         if not chart_empty(top, "No movies match the selected filters."):
-            fig = px.bar(
-                top,
-                x="weighted_rating",
-                y="title",
-                orientation="h",
-                color_discrete_sequence=[ACCENT],
-                hover_data={"average_rating": ":.2f", "rating_count": ":,"},
-                labels={
-                    "weighted_rating": "Weighted score",
-                    "title": "Movie",
-                    "average_rating": "Average rating",
-                    "rating_count": "Ratings",
-                },
-            )
-            fig.update_layout(yaxis_title="", xaxis_range=[0, 5])
-            style_chart(fig, height=390, show_legend=False)
-            st.plotly_chart(fig, use_container_width=True)
+            fig, ax = plt.subplots(figsize=(8, 5))
+            ax.barh(top["title"], top["weighted_rating"], color=ACCENT)
+            ax.set_xlabel("Weighted score")
+            ax.set_ylabel("")
+            ax.set_xlim(0, 5)
+            ax.invert_yaxis()
+            style_axes(ax, "Most popular titles")
+            show_chart(fig)
 
     with right:
         section("Rating distribution", "How viewers use the 0.5–5 rating scale.")
         if not chart_empty(global_distribution, "No rating data available."):
-            fig = px.bar(
-                global_distribution,
-                x="rating",
-                y="count",
-                color_discrete_sequence=[ORANGE],
-                labels={"rating": "Viewer rating", "count": "Number of ratings"},
-            )
-            fig.update_traces(marker_line_width=0)
-            fig.update_layout(xaxis=dict(tickmode="linear", dtick=0.5))
-            style_chart(fig, height=390, show_legend=False)
-            st.plotly_chart(fig, use_container_width=True)
+            fig, ax = plt.subplots(figsize=(7, 5))
+            ax.bar(global_distribution["rating"], global_distribution["count"],
+                   width=0.35, color=ORANGE)
+            ax.set_xlabel("Viewer rating")
+            ax.set_ylabel("Number of ratings")
+            ax.set_xticks(sorted(global_distribution["rating"].unique()))
+            style_axes(ax, "Rating distribution")
+            show_chart(fig)
 
     section("Genre pulse", "Genres with the largest number of titles in the current selection.")
     genre_rows = []
@@ -986,17 +954,13 @@ if page == "Overview":
             pd.DataFrame(genre_rows).groupby("Genre")["Movie"]
             .nunique().sort_values(ascending=False).head(8).reset_index(name="Movies")
         )
-        fig = px.bar(
-            genre_count.sort_values("Movies"),
-            x="Movies",
-            y="Genre",
-            orientation="h",
-            color_discrete_sequence=[ACCENT],
-            labels={"Movies": "Number of movies"},
-        )
-        fig.update_layout(yaxis_title="")
-        style_chart(fig, height=330, show_legend=False)
-        st.plotly_chart(fig, use_container_width=True)
+        fig, ax = plt.subplots(figsize=(10, 4))
+        genre_plot = genre_count.sort_values("Movies")
+        ax.barh(genre_plot["Genre"], genre_plot["Movies"], color=ACCENT)
+        ax.set_xlabel("Number of movies")
+        ax.set_ylabel("")
+        style_axes(ax, "Genre pulse")
+        show_chart(fig)
     else:
         empty_state("No genre information available for the current selection.")
 
@@ -1062,18 +1026,16 @@ elif page == "Movie Explorer":
             if dist.empty:
                 empty_state("This title has no viewer ratings in the dataset.")
             else:
-                fig = px.bar(
-                    dist.sort_values("rating"),
-                    x="rating",
-                    y="count",
-                    text="count",
-                    color_discrete_sequence=[ACCENT],
-                    labels={"rating": "Rating score", "count": "Number of viewers"},
-                )
-                fig.update_traces(textposition="outside")
-                fig.update_layout(xaxis=dict(tickmode="linear", dtick=0.5))
-                style_chart(fig, height=360, show_legend=False)
-                st.plotly_chart(fig, use_container_width=True)
+                fig, ax = plt.subplots(figsize=(7, 4))
+                dist_plot = dist.sort_values("rating")
+                bars = ax.bar(dist_plot["rating"], dist_plot["count"],
+                              width=0.35, color=ACCENT)
+                ax.bar_label(bars, padding=3, fontsize=8)
+                ax.set_xlabel("Rating score")
+                ax.set_ylabel("Number of viewers")
+                ax.set_xticks(sorted(dist_plot["rating"].unique()))
+                style_axes(ax, "Audience rating breakdown")
+                show_chart(fig)
 
         with right:
             section("What the score means", "A quick explanation of the ranking fields.")
@@ -1117,24 +1079,15 @@ elif page == "Popularity Rankings":
         left, right = st.columns([1.2, 1])
         with left:
             chart_data = ranking.head(20).sort_values("weighted_rating")
-            fig = px.bar(
-                chart_data,
-                x="weighted_rating",
-                y="title",
-                orientation="h",
-                color="average_rating",
-                color_continuous_scale=["#FBE0BF", "#E0862B", "#176B50"],
-                hover_data={"rating_count": ":,", "average_rating": ":.2f"},
-                labels={
-                    "weighted_rating": "Weighted popularity",
-                    "title": "Movie",
-                    "average_rating": "Average rating",
-                    "rating_count": "Rating count",
-                },
-            )
-            fig.update_layout(yaxis_title="", coloraxis_colorbar_title="Avg. rating")
-            style_chart(fig, height=650, show_legend=False)
-            st.plotly_chart(fig, use_container_width=True)
+            fig, ax = plt.subplots(figsize=(8, 8))
+            ax.barh(chart_data["title"], chart_data["weighted_rating"],
+                    color=ACCENT)
+            ax.set_xlabel("Weighted popularity")
+            ax.set_ylabel("")
+            ax.set_xlim(0, 5)
+            ax.invert_yaxis()
+            style_axes(ax, "Popularity rankings")
+            show_chart(fig)
         with right:
             section("Top 10 titles", "Highest weighted popularity scores.")
             top10 = ranking.head(10)
@@ -1193,16 +1146,14 @@ elif page == "Rating Intelligence":
     left, right = st.columns(2)
     with left:
         section("Overall rating distribution", "Frequency of each rating value.")
-        fig = px.bar(
-            global_distribution,
-            x="rating",
-            y="count",
-            color_discrete_sequence=[ORANGE],
-            labels={"rating": "Rating", "count": "Number of ratings"},
-        )
-        fig.update_layout(xaxis=dict(tickmode="linear", dtick=0.5))
-        style_chart(fig, height=370, show_legend=False)
-        st.plotly_chart(fig, use_container_width=True)
+        fig, ax = plt.subplots(figsize=(7, 4))
+        ax.bar(global_distribution["rating"], global_distribution["count"],
+               width=0.35, color=ORANGE)
+        ax.set_xlabel("Rating")
+        ax.set_ylabel("Number of ratings")
+        ax.set_xticks(sorted(global_distribution["rating"].unique()))
+        style_axes(ax, "Overall rating distribution")
+        show_chart(fig)
 
     with right:
         section("Rating volume by movie", "Movies with more ratings appear further to the right.")
@@ -1213,22 +1164,18 @@ elif page == "Rating Intelligence":
             scatter = rated
             if len(scatter) > 5000:
                 scatter = scatter.sample(5000, random_state=42)
-            fig = px.scatter(
-                scatter,
-                x="rating_count",
-                y="average_rating",
-                color="weighted_rating",
-                hover_name="title",
-                hover_data=["genres", "release_year"],
-                color_continuous_scale=["#FBE0BF", "#E0862B", "#176B50"],
-                labels={
-                    "rating_count": "Number of ratings",
-                    "average_rating": "Average rating",
-                    "weighted_rating": "Weighted popularity",
-                },
+            fig, ax = plt.subplots(figsize=(7, 4))
+            points = ax.scatter(
+                scatter["rating_count"], scatter["average_rating"],
+                c=scatter["weighted_rating"], cmap="YlGn",
+                alpha=0.65, s=22, edgecolors="none"
             )
-            style_chart(fig, height=370, show_legend=False)
-            st.plotly_chart(fig, use_container_width=True)
+            ax.set_xlabel("Number of ratings")
+            ax.set_ylabel("Average rating")
+            ax.set_ylim(0, 5)
+            fig.colorbar(points, ax=ax, label="Weighted popularity")
+            style_axes(ax, "Rating volume by movie")
+            show_chart(fig)
             if len(rated) > len(scatter):
                 st.caption("Scatter plot uses a 5,000-movie sample for responsiveness.")
 
@@ -1277,29 +1224,25 @@ elif page == "Genre Insights":
         a, b = st.columns(2)
         with a:
             section("Catalogue by genre", "Number of distinct titles in each genre.")
-            fig = px.bar(
-                summary.sort_values("Movies"),
-                x="Movies",
-                y="Genre",
-                orientation="h",
-                color_discrete_sequence=[ACCENT],
-            )
-            fig.update_layout(yaxis_title="")
-            style_chart(fig, height=430, show_legend=False)
-            st.plotly_chart(fig, use_container_width=True)
+            fig, ax = plt.subplots(figsize=(7, 5))
+            genre_plot = summary.sort_values("Movies")
+            ax.barh(genre_plot["Genre"], genre_plot["Movies"], color=ACCENT)
+            ax.set_xlabel("Number of movies")
+            ax.set_ylabel("")
+            style_axes(ax, "Catalogue by genre")
+            show_chart(fig)
 
         with b:
             section("Average rating by genre", "Unweighted average of movie-level ratings.")
-            fig = px.bar(
-                summary.sort_values("Average rating"),
-                x="Average rating",
-                y="Genre",
-                orientation="h",
-                color_discrete_sequence=[ORANGE],
-            )
-            fig.update_layout(yaxis_title="", xaxis_range=[0, 5])
-            style_chart(fig, height=430, show_legend=False)
-            st.plotly_chart(fig, use_container_width=True)
+            fig, ax = plt.subplots(figsize=(7, 5))
+            rating_plot = summary.sort_values("Average rating")
+            ax.barh(rating_plot["Genre"], rating_plot["Average rating"],
+                    color=ORANGE)
+            ax.set_xlabel("Average rating")
+            ax.set_ylabel("")
+            ax.set_xlim(0, 5)
+            style_axes(ax, "Average rating by genre")
+            show_chart(fig)
 
         section("Genre register", "Detailed summary for the selected catalogue.")
         st.dataframe(
@@ -1348,31 +1291,25 @@ elif page == "Release Trends":
         a, b = st.columns(2)
         with a:
             section("Movie releases", "Number of titles in the dataset by release year.")
-            fig = px.line(
-                yearly_summary,
-                x="release_year",
-                y="Movies",
-                markers=True,
-                color_discrete_sequence=[ACCENT],
-                labels={"release_year": "Release year"},
-            )
-            fig.update_layout(xaxis_title="Release year")
-            style_chart(fig, height=370, show_legend=False)
-            st.plotly_chart(fig, use_container_width=True)
+            fig, ax = plt.subplots(figsize=(7, 4))
+            ax.plot(yearly_summary["release_year"], yearly_summary["Movies"],
+                    marker="o", markersize=3, linewidth=2, color=ACCENT)
+            ax.set_xlabel("Release year")
+            ax.set_ylabel("Number of movies")
+            style_axes(ax, "Movie releases")
+            show_chart(fig)
 
         with b:
             section("Average movie rating", "Unweighted mean of movie-level average ratings.")
-            fig = px.line(
-                yearly_summary,
-                x="release_year",
-                y="Mean movie rating",
-                markers=True,
-                color_discrete_sequence=[ORANGE],
-                labels={"release_year": "Release year"},
-            )
-            fig.update_layout(xaxis_title="Release year", yaxis_range=[0, 5])
-            style_chart(fig, height=370, show_legend=False)
-            st.plotly_chart(fig, use_container_width=True)
+            fig, ax = plt.subplots(figsize=(7, 4))
+            ax.plot(yearly_summary["release_year"],
+                    yearly_summary["Mean movie rating"],
+                    marker="o", markersize=3, linewidth=2, color=ORANGE)
+            ax.set_xlabel("Release year")
+            ax.set_ylabel("Average rating")
+            ax.set_ylim(0, 5)
+            style_axes(ax, "Average movie rating")
+            show_chart(fig)
 
         section("Yearly register", "Annual catalogue and rating summary.")
         st.dataframe(
@@ -1442,7 +1379,7 @@ st.markdown(
     """
     <div class="footer">
         <strong>CineScope · Movie Ratings & Viewer Intelligence</strong><br>
-        Built with Python, Pandas, Streamlit and Plotly.<br>
+        Built with Python, Pandas, Streamlit and Matplotlib.<br>
         An academic data analysis project exploring audience ratings,
         popularity patterns, genres and entertainment trends.
     </div>
